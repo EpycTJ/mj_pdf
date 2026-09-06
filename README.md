@@ -11,6 +11,82 @@
 
 </div>
 
+## MJ PDF Viewer — Web edition (this repository)
+
+This repository contains a **complete, self-contained web implementation** of the MJ PDF viewer: the same philosophy — fast, private, quiet — running entirely in your browser. No build step, no framework, no network calls after load. Documents are processed on-device by [PDF.js](https://mozilla.github.io/pdf.js/) in a dedicated Web Worker.
+
+### Run it
+
+```sh
+git clone https://github.com/opentjcodes/mj_pdf.git
+cd mj_pdf
+node server.mjs        # → http://localhost:8080
+```
+
+Any static file server works. Open `index.html` and drop a PDF anywhere on the page.
+
+### Opening & supporting documents
+
+* Open from the file picker (**Ctrl+O**), drag & drop anywhere, clipboard paste, or a link (`?file=https://…` deep-links a remote PDF).
+* Password-protected PDFs ask (and re-ask) nicely; damaged files get a friendly error with retry.
+* Recent documents live on a shelf with covers, reading progress and one-tap reopen — stored in IndexedDB, capped and size-governed, never uploaded.
+* Standard-14 font data and CJK CMaps are vendored, so Helvetica-based and Asian-language PDFs render correctly offline.
+
+### Speed
+
+* All PDF parsing/rendering runs in a Web Worker — the UI thread never blocks.
+* **Virtualized rendering**: only pages near the viewport are painted; distant canvases are evicted, so memory stays flat on 1000-page manuals.
+* A **priority queue** paints what you're looking at first, then prefetches neighbours.
+* **Progressive measurement**: the first pages render before the page tree has been fully walked — huge files open instantly.
+* Thumbnails, outlines and the search index all build lazily; resize/zoom work is coalesced through `requestAnimationFrame`.
+
+### Reading
+
+* Fit-width / fit-page / free zoom (25–500%), pointer-anchored **Ctrl+wheel** zoom, rotation.
+* Streaming **search**: results count up while the index is still building; case- and diacritic-insensitive; highlights drawn from text geometry (correct at any zoom or rotation).
+* Real **text layer** over every visible page — select and copy actual text.
+* Thumbnails + document outline sidebars, page jumping, keyboard-first navigation (`?` shows all shortcuts).
+* Light / dark / system themes, **night pages** (inverts the document itself), fullscreen reading with auto-hiding chrome, reading-progress bar and per-document resume.
+
+### Craft
+
+* **Typography**: Inter Variable (one 48 KB file, weights 100–900), tabular numerals in page counters, a measured type scale, and documents keep their own fonts untouched.
+* **Icons**: one coherent hand-tuned set of stroke SVG icons on a 24-px grid (`currentColor`, ~150 bytes each) — no icon font, no per-icon requests.
+* **Color**: a shared violet-forward token set with full light/dark themes, AA-contrast surfaces, focus rings and consistent soft shadows.
+
+### Repository layout
+
+| Path | Role |
+| ---- | ---- |
+| `index.html` | App shell (home + reader screens) |
+| `css/app.css` | Design tokens & component styles (single, sectioned file) |
+| `js/` | ES modules: `engine` (PDF.js wrapper), `reader`, `home`, `textSearch`, `recents`, `icons`, `util`, `main` |
+| `vendor/` | PDF.js 5 (worker build), standard fonts, CMaps — everything offline |
+| `fonts/` | Inter Variable (latin + latin-ext) |
+| `sample/` | The built-in 8-page field guide (with outline) |
+| `test/` | Node test suites (see below) |
+| `tools/` | Sample-document generator (`pdf-lib`) |
+
+### Tests
+
+```sh
+cd test && npm install
+npm run search   # search pipeline vs the real PDF
+npm run engine   # the real js/engine.js module against the sample
+npm run app      # full app under jsdom (42 checks)
+```
+
+The integration test boots the real `main.js` against the real `index.html`, opens the sample, and drives zoom, rotation, sidebar, outline, search, theming, recents and re-opening — with a mocked canvas but genuine PDF.js geometry, text and outline data.
+
+### Browser support
+
+Modern evergreen browsers (Chrome/Edge 111+, Firefox 113+, Safari 16.4+), matching PDF.js 5 requirements.
+
+---
+
+*The sections below describe the original MJ PDF Android project, whose source lives on [GitLab](https://gitlab.com/mudlej_android/mj_pdf_reader).*
+
+
 <div align="center">
 
 <a href="https://mudlej.com/projects/mj-pdf"><img src="https://gitlab.com/mudlej_android/mj_pdf_reader/-/raw/main/assets/buttons/official_page.png" height="88" alt="The official MJ PDF page on mudlej.com"/></a>

@@ -1,0 +1,12 @@
+{
+  "name": "mj-pdf-tools",
+  "private": true,
+  "type": "module",
+  "description": "Build tooling for the MJ PDF Viewer sample document",
+  "scripts": {
+    "sample": "node make-sample.mjs"
+  },
+  "devDependencies": {
+    "pdf-lib": "^1.17.1"
+  }
+}

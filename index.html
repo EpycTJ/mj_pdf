@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="MJ PDF Viewer — a fast, private, beautiful PDF reader that runs entirely on your device.">
+  <meta name="theme-color" content="#f5f6fa" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0e1016" media="(prefers-color-scheme: dark)">
+  <title>MJ PDF Viewer</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%237c6cff'/%3E%3Cstop offset='1' stop-color='%235638d9'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='url(%23g)'/%3E%3Cpath d='M32 20.5c-3.2-2.6-7.4-3.1-11.5-1.9v24.9c4.1-1.2 8.3-.7 11.5 1.9 3.2-2.6 7.4-3.1 11.5-1.9V18.6c-4.1-1.2-8.3-.7-11.5 1.9z' fill='%23fff'/%3E%3Ccircle cx='47' cy='17.5' r='3' fill='%23fff' fill-opacity='.9'/%3E%3C/svg%3E">
+  <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/app.css">
+  <script type="module" src="js/main.js"></script>
+</head>
+<body data-screen="home">
+
+  <!-- ============================================================ HOME -->
+  <section class="screen screen-home" id="homeScreen" aria-label="Home">
+
+    <header class="home-topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64" width="26" height="26"><defs><linearGradient id="bm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c6cff"/><stop offset="1" stop-color="#5638d9"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#bm)"/><path d="M32 20.5c-3.2-2.6-7.4-3.1-11.5-1.9v24.9c4.1-1.2 8.3-.7 11.5 1.9 3.2-2.6 7.4-3.1 11.5-1.9V18.6c-4.1-1.2-8.3-.7-11.5 1.9z" fill="#fff"/><circle cx="47" cy="17.5" r="3" fill="#fff" fill-opacity=".9"/></svg>
+        </span>
+        <span class="brand-name">MJ&nbsp;PDF</span>
+        <span class="brand-tag">Viewer</span>
+      </div>
+      <div class="home-topbar-actions">
+        <button class="icon-btn" id="homeThemeBtn" title="Switch theme" aria-label="Switch theme"></button>
+        <a class="icon-btn" href="https://github.com/opentjcodes/mj_pdf" target="_blank" rel="noreferrer" title="Source code" aria-label="Source code on GitHub" data-icon="github"></a>
+      </div>
+    </header>
+
+    <main class="home-main">
+      <div class="hero">
+        <p class="hero-eyebrow">Fast · Private · Yours</p>
+        <h1 class="hero-title">A PDF reader that<br>gets out of the&nbsp;way.</h1>
+        <p class="hero-sub">Opens instantly, renders quietly, remembers where you stopped — and never sends a byte anywhere.</p>
+        <div class="hero-actions">
+          <button class="btn btn-primary btn-lg" id="openFileBtn">
+            <span data-icon="upload"></span>Open a PDF
+          </button>
+          <button class="btn btn-lg" id="openSampleBtn">
+            <span data-icon="sparkles"></span>Read the field guide
+          </button>
+          <button class="btn btn-lg" id="openUrlBtn">
+            <span data-icon="link"></span>From a link
+          </button>
+        </div>
+        <p class="hero-hint">…or drop a file anywhere on this page &nbsp;·&nbsp; <kbd>Ctrl</kbd>+<kbd>O</kbd> opens the picker</p>
+      </div>
+
+      <section class="recents" id="recentsSection" hidden>
+        <div class="section-row">
+          <h2 class="section-title">Continue reading</h2>
+          <button class="btn btn-ghost btn-sm" id="clearRecentsBtn"><span data-icon="trash"></span>Clear history</button>
+        </div>
+        <div class="recents-grid" id="recentsGrid"></div>
+      </section>
+    </main>
+
+    <footer class="home-footer">
+      <p>Documents never leave this device — processing, search and history are entirely local.</p>
+      <p class="home-footer-dim">MJ PDF · GPLv3 · rendering by PDF.js</p>
+    </footer>
+  </section>
+
+  <!-- ============================================================ READER -->
+  <section class="screen screen-reader" id="readerScreen" aria-label="Document" hidden>
+
+    <div class="read-progress" aria-hidden="true"><div class="read-progress-fill" id="readProgress"></div></div>
+
+    <header class="toolbar" id="toolbar">
+      <div class="tb-group">
+        <button class="icon-btn" id="homeBtn" title="Back to home" aria-label="Back to home" data-icon="arrow-left"></button>
+        <button class="icon-btn" id="sidebarBtn" title="Toggle sidebar (S)" aria-label="Toggle sidebar" aria-pressed="false" data-icon="panel-left"></button>
+        <div class="tb-title">
+          <div class="tb-title-text" id="docTitle">—</div>
+          <div class="tb-title-meta" id="docMeta"></div>
+        </div>
+      </div>
+
+      <div class="tb-group tb-right">
+        <button class="icon-btn" id="searchBtn" title="Search (/)" aria-label="Search in document" data-icon="search"></button>
+        <div class="zoom-cluster" role="group" aria-label="Zoom">
+          <button class="icon-btn" id="zoomOutBtn" title="Zoom out (−)" aria-label="Zoom out" data-icon="zoom-out"></button>
+          <button class="zoom-value" id="zoomModeBtn" title="Zoom options" aria-haspopup="menu">100%</button>
+          <button class="icon-btn" id="zoomInBtn" title="Zoom in (+)" aria-label="Zoom in" data-icon="zoom-in"></button>
+        </div>
+        <button class="icon-btn" id="rotateBtn" title="Rotate (R)" aria-label="Rotate pages" data-icon="rotate-cw"></button>
+        <button class="icon-btn" id="nightBtn" title="Night pages (N) — invert the document" aria-label="Toggle night pages" aria-pressed="false" data-icon="contrast"></button>
+        <button class="icon-btn" id="themeBtn" title="Theme (T)" aria-label="Switch theme"></button>
+        <button class="icon-btn" id="moreBtn" title="More" aria-label="More options" aria-haspopup="menu" data-icon="more"></button>
+      </div>
+
+      <div class="tb-search" id="searchWrap" role="search" hidden>
+        <span class="tb-search-icon" data-icon="search"></span>
+        <input id="searchInput" type="text" placeholder="Find in document…" spellcheck="false" autocomplete="off" aria-label="Find in document">
+        <span class="search-count" id="searchCount"></span>
+        <button class="icon-btn icon-btn-sm" id="searchPrevBtn" title="Previous match (Shift+Enter)" aria-label="Previous match"></button>
+        <button class="icon-btn icon-btn-sm" id="searchNextBtn" title="Next match (Enter)" aria-label="Next match"></button>
+        <button class="icon-btn icon-btn-sm" id="searchCloseBtn" title="Close search (Esc)" aria-label="Close search"></button>
+      </div>
+    </header>
+
+    <div class="reader-body">
+      <aside class="sidebar" id="sidebar" aria-label="Document panels" hidden>
+        <div class="sidebar-tabs" role="tablist" aria-label="Sidebar panels">
+          <button class="sidebar-tab" id="tabThumbs" role="tab" aria-selected="true" aria-controls="thumbsPane">Pages</button>
+          <button class="sidebar-tab" id="tabOutline" role="tab" aria-selected="false" aria-controls="outlinePane">Outline</button>
+        </div>
+        <div class="sidebar-panes">
+          <div class="sidebar-pane" id="thumbsPane" role="tabpanel" aria-labelledby="tabThumbs" tabindex="0">
+            <div class="thumb-list" id="thumbList"></div>
+          </div>
+          <div class="sidebar-pane" id="outlinePane" role="tabpanel" aria-labelledby="tabOutline" tabindex="0" hidden>
+            <div class="outline-empty" id="outlineEmpty" hidden>
+              <span data-icon="list"></span>
+              <p>This document has no outline.</p>
+            </div>
+            <nav class="outline-tree" id="outlineTree" aria-label="Table of contents"></nav>
+          </div>
+        </div>
+      </aside>
+
+      <div class="pages-viewport" id="pagesViewport" tabindex="0">
+        <div class="pages-stack" id="pagesStack"></div>
+
+        <div class="reader-overlay" id="readerOverlay" hidden>
+          <div class="overlay-card" id="overlayCard" role="status"></div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="statusbar">
+      <div class="sb-group">
+        <div class="page-box">
+          <input id="pageInput" class="page-input" type="text" inputmode="numeric" aria-label="Go to page" value="1">
+          <span class="page-total" id="pageTotal">/ —</span>
+        </div>
+        <span class="sb-chip" id="zoomChip" title="Current zoom">—</span>
+      </div>
+      <div class="sb-group sb-right">
+        <span class="sb-chip" id="sizeChip"></span>
+        <span class="sb-chip sb-chip-dim" id="engineChip">Local · worker</span>
+      </div>
+    </footer>
+  </section>
+
+  <!-- ============================================================ GLOBAL OVERLAYS -->
+  <div class="drop-veil" id="dropVeil" hidden>
+    <div class="drop-card">
+      <span class="drop-icon" data-icon="upload"></span>
+      <p class="drop-title">Drop to open</p>
+      <p class="drop-sub">The file stays on this device</p>
+    </div>
+  </div>
+
+  <dialog class="modal" id="passwordDialog" aria-labelledby="pwTitle">
+    <form method="dialog" class="modal-card">
+      <div class="modal-icon" data-icon="lock"></div>
+      <h2 id="pwTitle" class="modal-title">Protected document</h2>
+      <p class="modal-text" id="pwText">This PDF is encrypted. Enter its password to open it.</p>
+      <input type="password" id="pwInput" class="text-input" placeholder="Password" autocomplete="off" aria-label="Password">
+      <p class="modal-error" id="pwError" hidden>That password didn’t work — try again.</p>
+      <div class="modal-actions">
+        <button class="btn" id="pwCancel" value="cancel" formmethod="dialog">Cancel</button>
+        <button class="btn btn-primary" id="pwSubmit" value="ok">Unlock</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="urlDialog" aria-labelledby="urlTitle">
+    <form class="modal-card" id="urlForm">
+      <div class="modal-icon" data-icon="link"></div>
+      <h2 id="urlTitle" class="modal-title">Open from a link</h2>
+      <p class="modal-text">The file is downloaded straight to this page — nothing is uploaded anywhere.</p>
+      <input type="url" id="urlInput" class="text-input" placeholder="https://example.com/document.pdf" spellcheck="false" autocomplete="off">
+      <p class="modal-error" id="urlError" hidden>That link couldn’t be fetched. Cross-origin files must allow it (CORS).</p>
+      <div class="modal-actions">
+        <button type="button" class="btn" id="urlCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="urlGo">Open</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="modal modal-wide" id="shortcutsDialog" aria-labelledby="scTitle">
+    <div class="modal-card">
+      <h2 id="scTitle" class="modal-title">Keyboard shortcuts</h2>
+      <div class="shortcut-grid" id="shortcutGrid"></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" id="scClose">Got it</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+  <input type="file" id="fileInput" accept="application/pdf,.pdf" hidden>
+
+</body>
+</html>
