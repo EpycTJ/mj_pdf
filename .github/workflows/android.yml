@@ -26,10 +26,15 @@ on:
       ref:
         description: 'Upstream mj_pdf_reader ref to build (tag or branch)'
         required: false
-        default: 'v3.1.0'
+        default: 'main'
         type: string
+      publish_apk:
+        description: 'Also publish the APKs to the apk-dist branch'
+        required: false
+        default: false
+        type: boolean
       release_tag:
-        description: 'Also attach the APKs to a GitHub release with this tag (e.g. v3.1.0-web.1)'
+        description: 'Also attach the APKs to a GitHub release with this tag (e.g. v3.1.0-ci.1)'
         required: false
         default: ''
         type: string
@@ -40,7 +45,7 @@ concurrency:
 
 env:
   UPSTREAM_REPO: https://gitlab.com/mudlej_android/mj_pdf_reader.git
-  DEFAULT_REF: v3.1.0
+  DEFAULT_REF: main
   NDK_VERSION: 27.2.12479018
 
 jobs:
@@ -48,6 +53,8 @@ jobs:
     name: Build APKs from upstream source
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: write   # for publishing to the apk-dist branch
     outputs:
       ref: ${{ steps.meta.outputs.ref }}
     steps:
@@ -161,6 +168,46 @@ jobs:
       - name: Expose build metadata
         id: meta
         run: echo "ref=${BUILD_REF}" >> "$GITHUB_OUTPUT"
+
+      # Publishing is opt-in: a pull_request with the `publish-apk` label, or a
+      # workflow_dispatch run with `publish_apk` enabled. The APKs are
+      # force-pushed as a single fresh commit to the `apk-dist` branch, so the
+      # branch never accumulates history. (The workflow's GITHUB_TOKEN push
+      # does not trigger other workflows, so there is no loop.)
+      - name: Publish APKs to the apk-dist branch
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.publish_apk) ||
+          (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'publish-apk'))
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git init dist-repo
+          cd dist-repo
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b apk-dist
+          cp ../dist/*.apk .
+          cat > README.md <<DOC
+          # MJ PDF — compiled APKs
+
+          Built automatically by the *Android APK* workflow
+          (upstream source: [mudlej_android/mj_pdf_reader](${{ env.UPSTREAM_REPO }}) @ ${{ env.BUILD_REF }}).
+
+          * \`debug\` APK — debug-signed, installable on any device
+          * \`release-*-ci-signed\` APKs — minified, per-ABI, signed with a public CI key
+            (clean installs only; they will not upgrade an official MJ PDF release)
+
+          See \`SHA256SUMS\` for checksums. This branch is force-pushed on every
+          published build — do not branch off it.
+          DOC
+          sha256sum *.apk > SHA256SUMS
+          git add -A
+          git commit -m "APKs from run ${GITHUB_RUN_ID} (upstream ${BUILD_REF})"
+          git push -f origin apk-dist
+          echo "Published to https://github.com/${GITHUB_REPOSITORY}/tree/apk-dist"
 
       - name: Upload APKs
         uses: actions/upload-artifact@v4

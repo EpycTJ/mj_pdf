@@ -86,10 +86,12 @@ Modern evergreen browsers (Chrome/Edge 111+, Firefox 113+, Safari 16.4+), matchi
 
 The genuine MJ PDF **Android app** is developed upstream on [GitLab](https://gitlab.com/mudlej_android/mj_pdf_reader); this repository compiles it automatically with GitHub Actions ([`.github/workflows/android.yml`](.github/workflows/android.yml)):
 
-* Clones the pinned upstream release (default `v3.1.0`) and builds it with the project's own Gradle wrapper.
+* Clones the pinned upstream release (default: `main`, whose changelog is at 3.1.0) and builds it with the project's own Gradle wrapper.
 * Produces the **debug APK** (debug-signed, installable) and the **release APKs** (minified, per-ABI, signed with a public CI key so they install directly).
 * If an upstream ref ever ships without the prebuilt native libraries, the workflow installs the NDK and builds them with the project's own script (prebuilt PDFium from `bblanchon/pdfium-binaries`).
-* APKs are attached to each run as artifacts (30-day retention). To run it yourself: **Actions → Android APK → Run workflow** — optionally set the upstream ref, and a release tag to also attach the APKs to a GitHub Release.
+* APKs are attached to each run as artifacts (30-day retention).
+* **Publishing is opt-in**: a pull request carrying the `publish-apk` label, or a dispatched run with *publish_apk* enabled, force-pushes the fresh APKs to the [`apk-dist` branch](https://github.com/opentjcodes/mj_pdf/tree/apk-dist) (single commit, with `SHA256SUMS`).
+* A dispatched run can also set *release_tag* to attach the APKs to a GitHub Release.
 
 > Note: CI-signed APKs install cleanly but will **not** upgrade an install of an official MJ PDF release (different signing key).
 
