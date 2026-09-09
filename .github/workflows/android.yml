@@ -1,26 +1,248 @@
-name: Android CI
+name: Android APK
+
+# Builds the real MJ PDF Android app (upstream source: mudlej_android/mj_pdf_reader)
+# and publishes the APKs as workflow artifacts.
+#
+#   • source ref is pinned (default: the v3.1.0 release) and can be overridden
+#     via workflow_dispatch
+#   • the upstream repo ships prebuilt native libraries; if a future ref
+#     doesn't, the workflow installs the NDK and builds them with the
+#     project's own script (prebuilt PDFium from bblanchon/pdfium-binaries)
+#   • debug APK is debug-signed (installable); release APKs are minified
+#     per-ABI and signed with a public CI key so they install directly —
+#     they will NOT upgrade an install of the official release
+#
+# Runs on PRs and pushes that touch this workflow, and on demand.
 
 on:
-  push:
-    branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ main ]
+    paths: [ '.github/workflows/android.yml' ]
+  push:
+    branches: [ main ]
+    paths: [ '.github/workflows/android.yml' ]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Upstream mj_pdf_reader ref to build (tag or branch)'
+        required: false
+        default: 'main'
+        type: string
+      publish_apk:
+        description: 'Also publish the APKs to the apk-dist branch'
+        required: false
+        default: false
+        type: boolean
+      release_tag:
+        description: 'Also attach the APKs to a GitHub release with this tag (e.g. v3.1.0-ci.1)'
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UPSTREAM_REPO: https://gitlab.com/mudlej_android/mj_pdf_reader.git
+  DEFAULT_REF: main
+  NDK_VERSION: 27.2.12479018
 
 jobs:
   build:
-
+    name: Build APKs from upstream source
     runs-on: ubuntu-latest
-
+    timeout-minutes: 45
+    permissions:
+      contents: write   # for publishing to the apk-dist branch
+    outputs:
+      ref: ${{ steps.meta.outputs.ref }}
     steps:
-    - uses: actions/checkout@v4
-    - name: set up JDK 11
-      uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-        cache: gradle
+      - name: Clone upstream MJ PDF source
+        env:
+          WANT_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || env.DEFAULT_REF }}
+        run: |
+          set -euo pipefail
+          echo "Building $UPSTREAM_REPO @ $WANT_REF"
+          for ref in "$WANT_REF" "$DEFAULT_REF" v3.1.0 3.1.0 v3.1 main; do
+            if git clone --depth 1 --branch "$ref" "$UPSTREAM_REPO" mjpdf; then
+              echo "BUILD_REF=$ref" >> "$GITHUB_ENV"
+              echo "Cloned ref: $ref"
+              break
+            fi
+            echo "…ref '$ref' not found, trying next"
+          done
+          test -d mjpdf || { echo "::error::could not clone any ref from $UPSTREAM_REPO"; exit 1; }
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-    - name: Build with Gradle
-      run: ./gradlew build
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('mjpdf/**/build.gradle', 'mjpdf/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Check prebuilt native libraries
+        id: natives
+        run: |
+          set -euo pipefail
+          n=$(find mjpdf -name '*.so' -not -path '*/.git/*' | wc -l)
+          echo "count=$n" >> "$GITHUB_OUTPUT"
+          echo "Found $n prebuilt .so files"
+
+      - name: Install NDK (no prebuilt natives)
+        if: steps.natives.outputs.count == '0'
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}" >/dev/null
+          echo "ANDROID_NDK=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          ls "$ANDROID_HOME/ndk/"
+
+      - name: Build native dependencies (prebuilt PDFium)
+        if: steps.natives.outputs.count == '0'
+        run: |
+          set -euo pipefail
+          cd mjpdf
+          python3 build_dependencies.py --pdfium prebuilt
+
+      - name: Build debug APK
+        run: |
+          set -euo pipefail
+          cd mjpdf
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Build release APKs (per-ABI, minified)
+        id: release
+        run: |
+          set -euo pipefail
+          cd mjpdf
+          ./gradlew assembleRelease --no-daemon --stacktrace
+        continue-on-error: true
+
+      - name: Sign release APKs with a CI key
+        if: steps.release.outcome == 'success'
+        run: |
+          set -euo pipefail
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "Using build-tools: $BT"
+          keytool -genkeypair -keystore ci.keystore \
+            -storepass mjpdf-ci -keypass mjpdf-ci -alias mjpdf \
+            -dname "CN=MJ PDF CI, O=opentjcodes" -keyalg RSA -keysize 2048 -validity 10000
+          shopt -s nullglob
+          signed=0
+          for apk in mjpdf/app/build/outputs/apk/release/*-unsigned.apk; do
+            out="${apk%-unsigned.apk}-ci-signed.apk"
+            "$BT/apksigner" sign --ks ci.keystore --ks-pass pass:mjpdf-ci \
+              --key-pass pass:mjpdf-ci --out "$out" "$apk"
+            echo "signed $(basename "$out")"
+            signed=$((signed+1))
+          done
+          echo "Signed $signed release APKs"
+
+      - name: Collect and verify APKs
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          shopt -s nullglob globstar
+          found=0
+          for apk in mjpdf/app/build/outputs/apk/**/*.apk; do
+            case "$apk" in *-unsigned.apk) continue ;; esac   # keep signed variants only
+            found=$((found+1))
+            base=$(basename "$apk" .apk)
+            cp "$apk" "dist/MJ-PDF_${BUILD_REF}_${base}.apk"
+          done
+          test "$found" -gt 0 || { echo "::error::no installable APKs were produced"; exit 1; }
+          for apk in dist/*.apk; do
+            unzip -l "$apk" | grep -q classes.dex || { echo "::error::$apk is missing classes.dex"; exit 1; }
+            ls -lh "$apk"
+          done
+
+      - name: Expose build metadata
+        id: meta
+        run: echo "ref=${BUILD_REF}" >> "$GITHUB_OUTPUT"
+
+      # Publishing is opt-in: a pull_request with the `publish-apk` label, or a
+      # workflow_dispatch run with `publish_apk` enabled. The APKs are
+      # force-pushed as a single fresh commit to the `apk-dist` branch, so the
+      # branch never accumulates history. (The workflow's GITHUB_TOKEN push
+      # does not trigger other workflows, so there is no loop.)
+      - name: Publish APKs to the apk-dist branch
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.publish_apk) ||
+          (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'publish-apk'))
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git init dist-repo
+          cd dist-repo
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b apk-dist
+          cp ../dist/*.apk .
+          cat > README.md <<DOC
+          # MJ PDF — compiled APKs
+
+          Built automatically by the *Android APK* workflow
+          (upstream source: [mudlej_android/mj_pdf_reader](${{ env.UPSTREAM_REPO }}) @ ${{ env.BUILD_REF }}).
+
+          * \`debug\` APK — debug-signed, installable on any device
+          * \`release-*-ci-signed\` APKs — minified, per-ABI, signed with a public CI key
+            (clean installs only; they will not upgrade an official MJ PDF release)
+
+          See \`SHA256SUMS\` for checksums. This branch is force-pushed on every
+          published build — do not branch off it.
+          DOC
+          sha256sum *.apk > SHA256SUMS
+          git add -A
+          git commit -m "APKs from run ${GITHUB_RUN_ID} (upstream ${BUILD_REF})"
+          git push -f origin apk-dist
+          echo "Published to https://github.com/${GITHUB_REPOSITORY}/tree/apk-dist"
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: mj-pdf-apk-${{ env.BUILD_REF }}-${{ github.sha }}
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Attach APKs to a release
+    if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download APKs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: mj-pdf-apk-*
+          path: dist
+          merge-multiple: true
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+          SRC_REF: ${{ needs.build.outputs.ref }}
+        run: |
+          set -euo pipefail
+          ls -lh dist/
+          notes="Automated build of the upstream MJ PDF Android app (source: mudlej_android/mj_pdf_reader @ $SRC_REF).
+
+          Release APKs are signed with a public CI key — they install cleanly, but will not upgrade an install of an official MJ PDF release."
+          gh release create "$TAG" dist/*.apk --repo "$GITHUB_REPOSITORY" \
+            --title "MJ PDF $TAG" --notes "$notes" \
+          || gh release upload "$TAG" dist/*.apk --repo "$GITHUB_REPOSITORY" --clobber

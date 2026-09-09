@@ -1,0 +1,16 @@
+{
+  "name": "mj-pdf-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "search": "node search.test.mjs",
+    "engine": "node --import ./engine-hooks.mjs engine.test.mjs",
+    "app": "node --import ./hooks.mjs app.test.mjs",
+    "all": "node search.test.mjs && node --import ./engine-hooks.mjs engine.test.mjs && node --import ./hooks.mjs app.test.mjs"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "^1.0.8",
+    "fake-indexeddb": "^6.0.0",
+    "jsdom": "^26.0.0"
+  }
+}
